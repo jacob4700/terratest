@@ -1,0 +1,358 @@
+provider "azurerm" {
+  features {}
+}
+
+resource "azurerm_resource_group" "rg" {
+  name     = "C0714RG-HSTZ07"
+  location = "westeu"
+}
+
+resource "azurerm_virtual_network" "vnet" {
+  name                = "C0714RG-HSTZ07"
+  address_space       = ["10.0.0.0/16"]
+  location            = azurerm_resource_group.rg.location
+  resource_group_name = azurerm_resource_group.rg.name
+}
+
+resource "azurerm_subnet" "subnet" {
+  name                 = "subnet1"
+  resource_group_name  = azurerm_resource_group.rg.name
+  virtual_network_name = azurerm_virtual_network.vnet.name
+  address_prefixes     = ["10.0.1.0/24"]
+}
+
+resource "azurerm_network_security_group" "nsg" {
+  name                = "NSG-SRV-HASTZ07"
+  location            = azurerm_resource_group.rg.location
+  resource_group_name = azurerm_resource_group.rg.name
+}
+
+resource "azurerm_public_ip" "public_ip" {
+  count               = 5
+  name                = "publicip${count.index}"
+  location            = azurerm_resource_group.rg.location
+  resource_group_name = azurerm_resource_group.rg.name
+  allocation_method   = "Dynamic"
+}
+
+resource "azurerm_network_interface" "nic" {
+  count               = 5
+  name                = "nic${count.index}"
+  location            = azurerm_resource_group.rg.location
+  resource_group_name = azurerm_resource_group.rg.name
+
+  ip_configuration {
+    name                          = "ipconfig${count.index}"
+    subnet_id                     = azurerm_subnet.subnet.id
+    private_ip_address_allocation = "Dynamic"
+    public_ip_address_id          = azurerm_public_ip.public_ip[count.index].id
+  }
+}
+
+resource "azurerm_virtual_machine" "sql_server_vm" {
+  name                  = "C0714SQL01"
+  location              = azurerm_resource_group.rg.location
+  resource_group_name   = azurerm_resource_group.rg.name
+  network_interface_ids = [azurerm_network_interface.nic[0].id]
+  vm_size               = "Standard_D4s_v3"
+
+  storage_image_reference {
+    publisher = "MicrosoftSQLServer"
+    offer     = "SQL2019-WS2019"
+    sku       = "Enterprise"
+    version   = "latest"
+  }
+
+  storage_os_disk {
+    name              = "osdisk"
+    caching           = "ReadWrite"
+    create_option     = "FromImage"
+    managed_disk_type = "Premium_LRS"
+    disk_size_gb      = 128
+  }
+
+  os_profile {
+    computer_name  = "C0714SQL01"
+    admin_username = "adminuser"
+    admin_password = "password123"
+  }
+
+  os_profile_windows_config {
+    enable_automatic_upgrades = true
+    provision_vm_agent        = true
+  }
+
+  boot_diagnostics {
+    enabled = true
+  }
+}
+
+resource "azurerm_virtual_machine" "app_vm" {
+  name                  = "C0714APP01"
+  location              = azurerm_resource_group.rg.location
+  resource_group_name   = azurerm_resource_group.rg.name
+  network_interface_ids = [azurerm_network_interface.nic[1].id]
+  vm_size               = "Standard_D4s_v3"
+
+  storage_image_reference {
+    publisher = "MicrosoftWindowsServer"
+    offer     = "WindowsServer"
+    sku       = "2019-Datacenter"
+    version   = "latest"
+  }
+
+  storage_os_disk {
+    name              = "osdisk"
+    caching           = "ReadWrite"
+    create_option     = "FromImage"
+    managed_disk_type = "Premium_LRS"
+    disk_size_gb      = 128
+  }
+
+  storage_data_disk {
+    name              = "datadisk"
+    managed_disk_type = "Premium_LRS"
+    disk_size_gb      = 32
+    lun               = 0
+    create_option     = "Empty"
+  }
+
+  storage_data_disk {
+    name              = "datadisk"
+    managed_disk_type = "Premium_LRS"
+    disk_size_gb      = 256
+    lun               = 1
+    create_option     = "Empty"
+  }
+
+  os_profile {
+    computer_name  = "C0714APP01"
+    admin_username = "adminuser"
+    admin_password = "password123"
+  }
+
+  os_profile_windows_config {
+    enable_automatic_upgrades = true
+    provision_vm_agent        = true
+  }
+
+  boot_diagnostics {
+    enabled = true
+  }
+}
+
+resource "azurerm_virtual_machine" "kms_vm" {
+  name                  = "C0714KMS01"
+  location              = azurerm_resource_group.rg.location
+  resource_group_name   = azurerm_resource_group.rg.name
+  network_interface_ids = [azurerm_network_interface.nic[2].id]
+  vm_size               = "Standard_D2s_v3"
+
+  storage_image_reference {
+    publisher = "MicrosoftWindowsServer"
+    offer     = "WindowsServer"
+    sku       = "2019-Datacenter"
+    version   = "latest"
+  }
+
+  storage_os_disk {
+    name              = "osdisk"
+    caching           = "ReadWrite"
+    create_option     = "FromImage"
+    managed_disk_type = "Premium_LRS"
+    disk_size_gb      = 128
+  }
+
+  storage_data_disk {
+    name              = "datadisk"
+    managed_disk_type = "Premium_LRS"
+    disk_size_gb      = 16
+    lun               = 0
+    create_option     = "Empty"
+  }
+
+  storage_data_disk {
+    name              = "datadisk"
+    managed_disk_type = "Premium_LRS"
+    disk_size_gb      = 64
+    lun               = 1
+    create_option     = "Empty"
+  }
+
+  os_profile {
+    computer_name  = "C0714KMS01"
+    admin_username = "adminuser"
+    admin_password = "password123"
+  }
+
+  os_profile_windows_config {
+    enable_automatic_upgrades = true
+    provision_vm_agent        = true
+  }
+
+  boot_diagnostics {
+    enabled = true
+  }
+}
+
+resource "azurerm_virtual_machine" "tools_vm" {
+  name                  = "C0714TOOL01"
+  location              = azurerm_resource_group.rg.location
+  resource_group_name   = azurerm_resource_group.rg.name
+  network_interface_ids = [azurerm_network_interface.nic[3].id]
+  vm_size               = "Standard_D2s_v3"
+
+  storage_image_reference {
+    publisher = "MicrosoftWindowsServer"
+    offer     = "WindowsServer"
+    sku       = "2019-Datacenter"
+    version   = "latest"
+  }
+
+  storage_os_disk {
+    name              = "osdisk"
+    caching           = "ReadWrite"
+    create_option     = "FromImage"
+    managed_disk_type = "Premium_LRS"
+    disk_size_gb      = 128
+  }
+
+  storage_data_disk {
+    name              = "datadisk"
+    managed_disk_type = "Premium_LRS"
+    disk_size_gb      = 16
+    lun               = 0
+    create_option     = "Empty"
+  }
+
+  storage_data_disk {
+    name              = "datadisk"
+    managed_disk_type = "Premium_LRS"
+    disk_size_gb      = 64
+    lun               = 1
+    create_option     = "Empty"
+  }
+
+  os_profile {
+    computer_name  = "C0714TOOL01"
+    admin_username = "adminuser"
+    admin_password = "password123"
+  }
+
+  os_profile_windows_config {
+    enable_automatic_upgrades = true
+    provision_vm_agent        = true
+  }
+
+  boot_diagnostics {
+    enabled = true
+  }
+}
+
+resource "azurerm_virtual_machine" "rtm_vm" {
+  name                  = "C0714RTM01"
+  location              = azurerm_resource_group.rg.location
+  resource_group_name   = azurerm_resource_group.rg.name
+  network_interface_ids = [azurerm_network_interface.nic[4].id]
+  vm_size               = "Standard_B4ms"
+
+  storage_image_reference {
+    publisher = "MicrosoftWindowsServer"
+    offer     = "WindowsServer"
+    sku       = "2019-Datacenter"
+    version   = "latest"
+  }
+
+  storage_os_disk {
+    name              = "osdisk"
+    caching           = "ReadWrite"
+    create_option     = "FromImage"
+    managed_disk_type = "Premium_LRS"
+    disk_size_gb      = 128
+  }
+
+  storage_data_disk {
+    name              = "datadisk"
+    managed_disk_type = "Premium_LRS"
+    disk_size_gb      = 32
+    lun               = 0
+    create_option     = "Empty"
+  }
+
+  storage_data_disk {
+    name              = "datadisk"
+    managed_disk_type = "Premium_LRS"
+    disk_size_gb      = 64
+    lun               = 1
+    create_option     = "Empty"
+  }
+
+  os_profile {
+    computer_name  = "C0714RTM01"
+    admin_username = "adminuser"
+    admin_password = "password123"
+  }
+
+  os_profile_windows_config {
+    enable_automatic_upgrades = true
+    provision_vm_agent        = true
+  }
+
+  boot_diagnostics {
+    enabled = true
+  }
+}
+
+resource "azurerm_virtual_machine" "info_vm" {
+  name                  = "INF01"
+  location              = azurerm_resource_group.rg.location
+  resource_group_name   = azurerm_resource_group.rg.name
+  network_interface_ids = [azurerm_network_interface.nic[5].id]
+  vm_size               = "Standard_D2s_v3"
+
+  storage_image_reference {
+    publisher = "MicrosoftWindowsServer"
+    offer     = "WindowsServer"
+    sku       = "2019-Datacenter"
+    version   = "latest"
+  }
+
+  storage_os_disk {
+    name              = "osdisk"
+    caching           = "ReadWrite"
+    create_option     = "FromImage"
+    managed_disk_type = "Premium_LRS"
+    disk_size_gb      = 128
+  }
+
+  storage_data_disk {
+    name              = "datadisk"
+    managed_disk_type = "Premium_LRS"
+    disk_size_gb      = 16
+    lun               = 0
+    create_option     = "Empty"
+  }
+
+  storage_data_disk {
+    name              = "datadisk"
+    managed_disk_type = "Premium_LRS"
+    disk_size_gb      = 64
+    lun               = 1
+    create_option     = "Empty"
+  }
+
+  os_profile {
+    computer_name  = "INF01"
+    admin_username = "adminuser"
+    admin_password = "password123"
+  }
+
+  os_profile_windows_config {
+    enable_automatic_upgrades = true
+    provision_vm_agent        = true
+  }
+
+  boot_diagnostics {
+    enabled = true
+  }
+}
